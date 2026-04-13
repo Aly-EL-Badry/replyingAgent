@@ -9,7 +9,7 @@ Facebook comment.
 from __future__ import annotations
 
 from config.config import settings
-from src.ai.hf_client import hf_client
+from src.infrastructure.hf_client import hf_client
 
 
 
@@ -27,14 +27,14 @@ async def generate_reply(comment_text: str) -> str:
     str
         The generated reply text.
     """
-    prompt = _build_prompt(comment_text)
-    return await hf_client.generate(prompt)
+    messages = _build_messages(comment_text)
+    return await hf_client.generate(messages)
 
 
-def _build_prompt(comment_text: str) -> str:
-    """Format the final prompt using the system prompt from config."""
+def _build_messages(comment_text: str) -> list[dict[str, str]]:
+    """Build a chat-completions messages list from the system prompt + comment."""
     system = settings.reply.system_prompt
-    return (
-        f"<s>[INST] <<SYS>>\n{system}\n<</SYS>>\n\n"
-        f"Comment: {comment_text} [/INST]"
-    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"Comment: {comment_text}"},
+    ]

@@ -6,11 +6,10 @@ from pydantic import BaseModel
 
 class HuggingFaceSettings(BaseModel):
     model_id: str
-    api_base_url: str
+    fallback_model_id: str = "Qwen/Qwen2.5-72B-Instruct"
     max_new_tokens: int = 256
     temperature: float = 0.7
     top_p: float = 0.9
-    repetition_penalty: float = 1.1
     request_timeout: int = 30
 
 

@@ -10,7 +10,7 @@ Single Settings class built on pydantic-settings.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Tuple, Type
+from typing import Any
 
 import yaml
 from pydantic import Field
@@ -62,21 +62,26 @@ class Settings(BaseSettings):
 
     hf_token: str = Field(validation_alias="HF_TOKEN")
     fb_token: str = Field(validation_alias="FB_TOKEN")
+    fb_verify_token: str = Field(validation_alias="FB_VERIFY_TOKEN")
+
+    def __init__(self, **values: Any) -> None:
+        super().__init__(**values)
 
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
-        secrets_dir_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (
             init_settings,
             env_settings,
             dotenv_settings,
             YamlConfigSource(settings_cls),
+            file_secret_settings,
         )
 
 

@@ -10,6 +10,8 @@ python-dotenv = "*"
 pyyaml = "*"
 pydantic-settings = "*"
 httpx = "*"
+ty = "*"
+huggingface-hub = "*"
 
 [dev-packages]
 

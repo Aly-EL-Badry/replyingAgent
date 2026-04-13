@@ -1,16 +1,38 @@
-def ingest_data(data: dict) -> list[tuple[str, str]]:
+def ingest_data(data: dict) -> list[tuple[str, str, str, str]]:
     """
-    Parse the Facebook webhook payload and extract new comment events.
-
-    Returns a list of (comment_id, comment_text) tuples for every
-    comment-add event found in the payload.
+    Parse Facebook webhook data and return a list of
+    (comment_id, message, sender_id, sender_name) tuples.
     """
     events = []
+    # Print this so you can see exactly what Facebook is sending in your console
+    print(f"Received Webhook Data: {data}") 
+
     for entry in data.get("entry", []):
+        page_id = entry.get("id")
+
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            if value.get("item") == "comment" and value.get("verb") == "add":
-                comment_id = value.get("comment_id")
-                comment_text = value.get("message")
-                events.append((comment_id, comment_text))
-    return events
+            item_type = value.get("item")
+            verb = value.get("verb")
+
+            # Skip events from the page itself to avoid infinite reply loops
+            sender = value.get("from", {})
+            sender_id = sender.get("id")
+            sender_name = sender.get("name", "")
+            if sender_id == page_id:
+                print(f"Skipping event from page itself (id={sender_id})")
+                continue
+
+            # Check for BOTH comments and status updates (posts)
+            if verb == "add":
+                if item_type == "comment":
+                    comment_id = value.get("comment_id")
+                    message = value.get("message")
+                    events.append((comment_id, message, sender_id, sender_name))
+                elif item_type == "status":
+                    post_id = value.get("post_id")
+                    message = value.get("message")
+                    events.append((post_id, message, sender_id, sender_name))
+                    
+    return events
+

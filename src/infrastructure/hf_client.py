@@ -1,24 +1,28 @@
 """
-src/ai/hf_client.py
--------------------
-Modular Hugging Face Inference API client.
+src/infrastructure/hf_client.py
+-------------------------------
+Modular Hugging Face Inference client using the official huggingface_hub library.
 
 Usage
 -----
-    from src.ai.hf_client import HFClient
+    from src.infrastructure.hf_client import HFClient
     client = HFClient()                    # uses settings singleton
-    reply = await client.generate(prompt)
+    reply = await client.generate(messages)
 """
 from __future__ import annotations
 
-import httpx
+import asyncio
+from huggingface_hub import InferenceClient
 from config.config import Settings, settings as _default_settings
 
 
 class HFClient:
     """
-    Thin async wrapper around the Hugging Face Inference API
-    (text-generation task).
+    Async wrapper around ``huggingface_hub.InferenceClient``
+    for chat-completion tasks.
+
+    The library automatically picks the best available provider
+    for the requested model – no manual URL wrangling needed.
 
     Parameters
     ----------
@@ -31,51 +35,59 @@ class HFClient:
         self._cfg = cfg or _default_settings
         hf = self._cfg.huggingface
 
-        self._url = f"{hf.api_base_url}/{hf.model_id}"
-        self._headers = {
-            "Authorization": f"Bearer {self._cfg.hf_token}",
-            "Content-Type": "application/json",
-        }
-        self._params = {
-            "max_new_tokens": hf.max_new_tokens,
+        self._primary_model = hf.model_id
+        self._fallback_model = hf.fallback_model_id
+
+        self._client = InferenceClient(
+            provider="auto",
+            api_key=self._cfg.hf_token,
+        )
+
+        self._gen_params = {
+            "max_tokens": hf.max_new_tokens,
             "temperature": hf.temperature,
             "top_p": hf.top_p,
-            "repetition_penalty": hf.repetition_penalty,
-            "return_full_text": False,
         }
-        self._timeout = hf.request_timeout
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, messages: list[dict[str, str]]) -> str:
         """
-        Send *prompt* to HF inference and return the generated text.
+        Send *messages* to HF inference and return the generated text.
+
+        Tries the primary model first; if that fails, falls back to
+        the secondary model.
 
         Raises
         ------
-        httpx.HTTPStatusError
-            When the API returns a non-2xx status.
-        ValueError
-            When the response JSON is in an unexpected shape.
+        Exception
+            When both primary and fallback models fail.
         """
-        payload = {
-            "inputs": prompt,
-            "parameters": self._params,
-        }
-
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.post(
-                self._url,
-                headers=self._headers,
-                json=payload,
+        try:
+            return await self._call(self._primary_model, messages)
+        except Exception as primary_err:
+            print(
+                f"Primary model {self._primary_model} failed: {primary_err}. "
+                f"Falling back to {self._fallback_model}."
             )
-            response.raise_for_status()
+            try:
+                return await self._call(self._fallback_model, messages)
+            except Exception as fallback_err:
+                raise RuntimeError(
+                    f"Both models failed.\n"
+                    f"  Primary ({self._primary_model}): {primary_err}\n"
+                    f"  Fallback ({self._fallback_model}): {fallback_err}"
+                ) from fallback_err
 
-        data = response.json()
-
-        # HF text-generation returns: [{"generated_text": "..."}]
-        if isinstance(data, list) and data:
-            return data[0].get("generated_text", "").strip()
-
-        raise ValueError(f"Unexpected HF response shape: {data}")
+    async def _call(
+        self, model: str, messages: list[dict[str, str]]
+    ) -> str:
+        """Run a single chat-completion request in a thread (sync → async)."""
+        response = await asyncio.to_thread(
+            self._client.chat_completion,
+            model=model,
+            messages=messages,
+            **self._gen_params,
+        )
+        return response.choices[0].message.content.strip()
 
 
 # Module-level client – one instance shared across all requests
