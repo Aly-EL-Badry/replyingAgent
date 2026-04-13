@@ -1,0 +1,20 @@
+huggingface:
+  model_id: "mistralai/Mistral-7B-Instruct-v0.3"
+  api_base_url: "https://api-inference.huggingface.co/models"
+
+  max_new_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+  repetition_penalty: 1.1
+  request_timeout: 30
+
+facebook:
+  graph_api_version: "v19.0"
+  graph_api_base_url: "https://graph.facebook.com"
+  request_timeout: 10
+
+reply:
+  system_prompt: >
+    You are a helpful and friendly customer support assistant.
+    Reply concisely and professionally to the following Facebook comment.
+    Do not repeat the comment. Reply in the same language as the comment.
