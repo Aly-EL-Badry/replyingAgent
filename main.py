@@ -1,57 +1,9 @@
-from fastapi import BackgroundTasks, FastAPI, Request
-from fastapi.responses import Response
-import asyncio
+from fastapi import FastAPI
 
-from app.core.settings_constant import settings
-from app.utils.ingestion import ingest_data
-from app.reply.generate import generate_reply
-from app.facebook.reply import send_fb_reply
+from app.api.v1.health import router as health_router
+from app.api.v1.webhook import router as webhook_router
 
 app = FastAPI()
 
-
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
-
-@app.get("/trigger")
-async def verify_webhook(request: Request):
-    # Facebook sends these 3 query params during webhook setup.
-    mode = request.query_params.get("hub.mode")
-    token = request.query_params.get("hub.verify_token")
-    challenge = request.query_params.get("hub.challenge")
-
-    if mode == "subscribe" and token == settings.fb_verify_token and challenge:
-        print("WEBHOOK_VERIFIED")
-        return Response(content=challenge, media_type="text/plain")
-
-    return Response(content="Verification failed", status_code=403)
-
-
-@app.post("/trigger")
-async def webhook_listener(request: Request, background_tasks: BackgroundTasks):
-    data = await request.json()
-
-    events = ingest_data(data)
-
-    for comment_id, comment_text, sender_id, sender_name in events:
-        background_tasks.add_task(
-            process_cycle, comment_id, comment_text, sender_id, sender_name
-        )
-
-    return {"status": "ok"}
-
-
-async def process_cycle(
-    comment_id: str, text: str, sender_id: str, sender_name: str
-):
-    try:
-        reply_text = await generate_reply(text)
-        if sender_id:
-            reply_text = f"@[{sender_id}] {reply_text}"
-        await asyncio.sleep(20)
-        await send_fb_reply(comment_id, reply_text)
-    except Exception as exc:
-        # Keep webhook processing resilient if an external API fails.
-        print(f"Failed to process comment {comment_id}: {exc}")
+app.include_router(health_router)
+app.include_router(webhook_router)
