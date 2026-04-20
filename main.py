@@ -2,10 +2,10 @@ from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import Response
 import asyncio
 
-from config.config import settings
-from src.utils.ingestion import ingest_data
-from src.reply.generate import generate_reply
-from src.facebook.reply import send_fb_reply
+from app.core.settings_constant import settings
+from app.utils.ingestion import ingest_data
+from app.reply.generate import generate_reply
+from app.facebook.reply import send_fb_reply
 
 app = FastAPI()
 

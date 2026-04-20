@@ -1,0 +1,5 @@
+facebook:
+  graph_api_version: "v25.0"
+  graph_api_base_url: "https://graph.facebook.com"
+  request_timeout: 10
+
