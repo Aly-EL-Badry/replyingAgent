@@ -10,11 +10,11 @@ Usage
     reply = await client.generate(messages)
 """
 from __future__ import annotations
-
+from typing import cast
 import asyncio
-from huggingface_hub import InferenceClient
-from config.config import Settings, settings as _default_settings
-
+from huggingface_hub import InferenceClient, ChatCompletionOutput
+from app.core.settings_constant import constants
+from app.core.settings_secrets import secrets, SecretSettings
 
 class HFClient:
     """
@@ -31,22 +31,21 @@ class HFClient:
         Defaults to the project-wide settings singleton.
     """
 
-    def __init__(self, cfg: Settings | None = None) -> None:
-        self._cfg = cfg or _default_settings
-        hf = self._cfg.huggingface
+    def __init__(self, cfg: SecretSettings | None = None) -> None:
+        self._cfg = cfg or secrets
 
-        self._primary_model = hf.model_id
-        self._fallback_model = hf.fallback_model_id
+        self._primary_model = constants.huggingface.model_id
+        self._fallback_model = constants.huggingface.fallback_model_id
 
         self._client = InferenceClient(
             provider="auto",
-            api_key=self._cfg.hf_token,
+            api_key=secrets.hf_token,
         )
 
         self._gen_params = {
-            "max_tokens": hf.max_new_tokens,
-            "temperature": hf.temperature,
-            "top_p": hf.top_p,
+            "max_tokens": constants.huggingface.max_new_tokens,
+            "temperature": constants.huggingface.temperature,
+            "top_p": constants.huggingface.top_p,
         }
 
     async def generate(self, messages: list[dict[str, str]]) -> str:
@@ -87,8 +86,7 @@ class HFClient:
             messages=messages,
             **self._gen_params,
         )
-        return response.choices[0].message.content.strip()
+        response = cast(ChatCompletionOutput, response)
+        return (response.choices[0].message.content or "").strip()
 
-
-# Module-level client – one instance shared across all requests
 hf_client = HFClient()

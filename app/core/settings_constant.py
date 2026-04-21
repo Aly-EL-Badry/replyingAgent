@@ -9,9 +9,9 @@ from pydantic_settings import (
     PydanticBaseSettingsSource, 
     SettingsConfigDict
 )
-from app.serializers.fb_settings import FacebookSettings
-from app.serializers.hf_settings import HuggingFaceSettings
-from app.serializers.prompt import Prompt
+from .serializers.fb_settings import FacebookSettings
+from .serializers.hf_settings import HuggingFaceSettings
+from .serializers.prompt import Prompt
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
