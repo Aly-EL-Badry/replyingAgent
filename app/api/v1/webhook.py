@@ -3,7 +3,7 @@ from fastapi.responses import Response
 
 from app.core.settings_secrets import secrets
 
-from app.features.reply.service import reply
+from app.features.comments.service import reply
 
 router = APIRouter(prefix="/reply", tags=["Comment replyer"])
 
