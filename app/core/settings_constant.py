@@ -37,7 +37,7 @@ class ConfigSource(PydanticBaseSettingsSource):
         super().__init__(settings_cls)
         self._data = _load_yaml_config()
 
-    def get_field_value(self, field: Any, field_name: str) -> Any:  # type: ignore[override]
+    def get_field_value(self, field: Any, field_name: str) -> Any:  
         return self._data.get(field_name), field_name, False
 
     def __call__(self) -> dict[str, Any]:
