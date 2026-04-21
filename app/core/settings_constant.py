@@ -12,23 +12,40 @@ from pydantic_settings import (
 from .serializers.fb_settings import FacebookSettings
 from .serializers.hf_settings import HuggingFaceSettings
 from .serializers.prompt import Prompt
+from .serializers.messenger_prompt import MessengerPrompt
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
+
+def _load_yaml_config() -> dict[str, Any]:
+    """Load and merge all YAML files from the config directory."""
+    config_data: dict[str, Any] = {}
+    if not CONFIG_DIR.exists():
+        return config_data
+    for file_path in CONFIG_DIR.glob("*.y*ml"):
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = yaml.safe_load(f)
+            if isinstance(content, dict):
+                config_data.update(content)
+    return config_data
+
+
 class ConfigSource(PydanticBaseSettingsSource):
     """Dynamically loads all YAML files from the config folder."""
-    
-    def __call__(self) -> dict[str, Any]:
-        config_data = {}
-        if not CONFIG_DIR.exists():
-            return config_data
 
-        for file_path in CONFIG_DIR.glob("*.y*ml"):
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = yaml.safe_load(f)
-                if isinstance(content, dict):
-                    config_data.update(content)
-        return config_data
+    def __init__(self, settings_cls: Type[BaseSettings]) -> None:
+        super().__init__(settings_cls)
+        self._data = _load_yaml_config()
+
+    def get_field_value(self, field: Any, field_name: str) -> Any:  # type: ignore[override]
+        return self._data.get(field_name), field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return {
+            field_name: self.get_field_value(field_info, field_name)[0]
+            for field_name, field_info in self.settings_cls.model_fields.items()
+            if self.get_field_value(field_info, field_name)[0] is not None
+        }
 
 class ConstantSettings(BaseSettings):
 
@@ -37,6 +54,7 @@ class ConstantSettings(BaseSettings):
     facebook: FacebookSettings = Field(default=...)
     huggingface: HuggingFaceSettings = Field(default=...)
     reply: Prompt = Field(default=...)
+    messenger: MessengerPrompt = Field(default=...)
 
     @classmethod
     def settings_customise_sources(
