@@ -12,6 +12,7 @@ pydantic-settings = "*"
 httpx = "*"
 ty = "*"
 huggingface-hub = "*"
+facebook-sdk = "*"
 
 [dev-packages]
 
