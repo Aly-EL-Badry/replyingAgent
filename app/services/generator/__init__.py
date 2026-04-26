@@ -7,6 +7,8 @@ Import from here to keep feature services decoupled from file layout:
 
     from app.services.generator import facebook_comment_generator
     from app.services.generator import messenger_reply_generator
+    from app.services.generator import classifier_generator
+    from app.services.generator import private_reply_generator
     from app.services.generator import BaseReplyGenerator   # for type hints
 """
 from .base_generator import BaseReplyGenerator
@@ -18,6 +20,14 @@ from .generators.messenger_reply_generator import (
     MessengerReplyGenerator,
     messenger_reply_generator,
 )
+from .generators.classifier_generator import (
+    ClassifierGenerator,
+    classifier_generator,
+)
+from .generators.private_reply_generator import (
+    PrivateReplyGenerator,
+    private_reply_generator,
+)
 
 __all__ = [
     "BaseReplyGenerator",
@@ -25,4 +35,8 @@ __all__ = [
     "facebook_comment_generator",
     "MessengerReplyGenerator",
     "messenger_reply_generator",
+    "ClassifierGenerator",
+    "classifier_generator",
+    "PrivateReplyGenerator",
+    "private_reply_generator",
 ]
