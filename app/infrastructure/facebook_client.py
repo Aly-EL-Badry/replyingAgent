@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -20,10 +21,11 @@ class FacebookClient:
         self._base_url = constants.facebook.graph_api_base_url
         self._timeout = constants.facebook.request_timeout
 
-    def post_reply(self, comment_id: str, reply_text: str) -> Any:
-        """Post a reply to a Facebook comment."""
-        response = self._graph.put_comment(object_id=comment_id, message=reply_text)
-        return response
+    async def post_reply(self, comment_id: str, reply_text: str) -> Any:
+        """Post a reply to a Facebook comment (async-safe via thread offload)."""
+        return await asyncio.to_thread(
+            self._graph.put_comment, comment_id, reply_text
+        )
 
     async def send_messenger_message(self, recipient_id: str, text: str) -> Any:
         url = f"{self._base_url}/{constants.facebook.graph_api_version}/me/messages"
