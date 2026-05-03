@@ -12,8 +12,6 @@ from pydantic_settings import (
 from .serializers.fb_settings import FacebookSettings
 from .serializers.hf_settings import HuggingFaceSettings
 from .serializers.prompt import Prompt
-from .serializers.messenger_prompt import MessengerPrompt
-from .serializers.classifier_prompt import ClassifierPrompt
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
@@ -55,8 +53,9 @@ class ConstantSettings(BaseSettings):
     facebook: FacebookSettings = Field(default=...)
     huggingface: HuggingFaceSettings = Field(default=...)
     reply: Prompt = Field(default=...)
-    messenger: MessengerPrompt = Field(default=...)
-    classifier: ClassifierPrompt = Field(default=...)
+    messenger: Prompt = Field(default=...)
+    classifier: Prompt = Field(default=...)
+    private_reply: Prompt = Field(default=...)
 
     @classmethod
     def settings_customise_sources(

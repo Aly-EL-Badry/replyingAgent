@@ -26,7 +26,7 @@ class PrivateReplyGenerator(BaseReplyGenerator):
 
     def __init__(self, client: HFClient | None = None) -> None:
         super().__init__(
-            system_prompt=constants.classifier.private_reply.system_prompt,
+            system_prompt=constants.private_reply.system_prompt,
             client=client,
         )
 

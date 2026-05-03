@@ -42,7 +42,7 @@ class ClassifierGenerator(BaseReplyGenerator):
 
     def __init__(self, client: HFClient | None = None) -> None:
         super().__init__(
-            system_prompt=constants.classifier.classifier.system_prompt,
+            system_prompt=constants.classifier.system_prompt,
             client=client,
         )
 
