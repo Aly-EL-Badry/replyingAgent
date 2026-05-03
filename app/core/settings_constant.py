@@ -1,4 +1,3 @@
-from click import prompt
 import yaml
 from pathlib import Path
 from typing import Any, Tuple, Type

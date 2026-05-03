@@ -13,6 +13,7 @@ httpx = "*"
 huggingface-hub = "*"
 facebook-sdk = "*"
 ty = "*"
+langgraph = "*"
 
 [dev-packages]
 
