@@ -16,11 +16,11 @@ import sys
 import uuid
 from unittest.mock import patch
 
-# Force UTF-8 output on Windows terminals
-if sys.stdout.encoding != "utf-8":
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
-# ── Separator helpers ─────────────────────────────────────────────────────────
+
+
 SEP  = "-" * 60
 SEP2 = "=" * 60
 
@@ -31,7 +31,6 @@ def section(title: str) -> None:
     print(f"\n{SEP}\n  {title}\n{SEP}")
 
 
-# ── Test cases ────────────────────────────────────────────────────────────────
 TEST_CASES = [
     {
         "label":     "Public comment (EN)",
@@ -54,7 +53,7 @@ TEST_CASES = [
 ]
 
 
-# ── Mock stubs ────────────────────────────────────────────────────────────────
+
 async def mock_post_reply(self, comment_id: str, reply_text: str) -> dict:
     print(f"  [FACEBOOK] post_reply(comment_id={comment_id!r})")
     print(f"     reply -> {reply_text!r}")
@@ -67,7 +66,7 @@ async def mock_send_messenger_message(self, recipient_id: str, text: str) -> dic
     return {"recipient_id": recipient_id, "message_id": "mock_msg_id"}
 
 
-# ── Runner ────────────────────────────────────────────────────────────────────
+
 async def run_test(case: dict, graph) -> None:
     from app.graph.state import CommentState
     from langchain_core.runnables import RunnableConfig
@@ -88,7 +87,7 @@ async def run_test(case: dict, graph) -> None:
     }
 
     try:
-        result = await graph.ainvoke(state, config=config)  # type: ignore[arg-type]
+        result = await graph.ainvoke(state, config=config)  
         print(f"\n  [OK] Graph completed.")
         print(f"  Final state keys: {list(result.keys()) if isinstance(result, dict) else type(result).__name__}")
     except Exception as exc:
@@ -99,8 +98,7 @@ async def run_test(case: dict, graph) -> None:
 async def main() -> None:
     header("LangGraph Comment Pipeline - Terminal Test")
 
-    # Patch Facebook calls BEFORE importing the graph so the singletons
-    # are built with the mocked client already in place.
+
     with (
         patch(
             "app.infrastructure.facebook_client.FacebookClient.post_reply",
@@ -111,9 +109,8 @@ async def main() -> None:
             new=mock_send_messenger_message,
         ),
     ):
-        # Import here so the module-level comment_graph singleton is built
-        # inside the patch context.
-        from app.graph.builder import comment_graph  # noqa: PLC0415
+
+        from app.graph.builder import comment_graph  
 
         graph = comment_graph.graph
 
