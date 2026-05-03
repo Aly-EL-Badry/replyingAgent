@@ -42,11 +42,9 @@ class HFClient:
             api_key=secrets.hf_token,
         )
 
-        self._gen_params = {
-            "max_tokens": constants.huggingface.max_new_tokens,
-            "temperature": constants.huggingface.temperature,
-            "top_p": constants.huggingface.top_p,
-        }
+        self._max_tokens: int = constants.huggingface.max_new_tokens
+        self._temperature: float = constants.huggingface.temperature
+        self._top_p: float = constants.huggingface.top_p
 
     async def generate(self, messages: list[dict[str, str]]) -> str:
         """
@@ -84,7 +82,9 @@ class HFClient:
             self._client.chat_completion,
             model=model,
             messages=messages,
-            **self._gen_params,
+            max_tokens=self._max_tokens,
+            temperature=self._temperature,
+            top_p=self._top_p,
         )
         response = cast(ChatCompletionOutput, response)
         return (response.choices[0].message.content or "").strip()
