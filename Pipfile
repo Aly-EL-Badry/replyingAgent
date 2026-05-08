@@ -4,8 +4,6 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-fastapi = "*"
-uvicorn = "*"
 python-dotenv = "*"
 pyyaml = "*"
 pydantic-settings = "*"
@@ -14,6 +12,17 @@ huggingface-hub = "*"
 facebook-sdk = "*"
 ty = "*"
 langgraph = "*"
+weaviate = "*"
+llama-index = "*"
+llama-index-vector-stores-weaviate = "*"
+llama-index-embeddings-huggingface = "*"
+llama-index-llms-huggingface = "*"
+weaviate-client = "*"
+fastapi = "*"
+uvicorn = "*"
+python-multipart = "*"
+transformers = "*"
+torch = "*"
 
 [dev-packages]
 

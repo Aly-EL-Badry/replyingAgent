@@ -21,4 +21,8 @@ class SecretSettings(BaseSettings):
     fb_token: str = Field(default=..., validation_alias="FB_TOKEN")
     fb_verify_token: str = Field(default=..., validation_alias="FB_VERIFY_TOKEN")
 
+    # Weaviate — optional (defaults allow local / embedded mode)
+    weaviate_url: str = Field(default="http://localhost:8080", validation_alias="WEAVIATE_URL")
+    weaviate_api_key: str | None = Field(default=None, validation_alias="WEAVIATE_API_KEY")
+
 secrets = SecretSettings()
