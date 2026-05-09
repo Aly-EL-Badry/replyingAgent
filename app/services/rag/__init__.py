@@ -16,19 +16,12 @@ from app.services.rag.retriever import (
     retrieve_context_as_string,
 )
 from app.services.rag.ingestion import ingest_file
-from app.services.rag.embedder import hf_embedder, RAGEmbedder
 
 __all__ = [
-    # Facade
     "rag_service",
     "RAGService",
-    # Retrieval
     "RetrievedChunk",
     "retrieve_context",
     "retrieve_context_as_string",
-    # Ingestion
     "ingest_file",
-    # Embedder
-    "hf_embedder",
-    "RAGEmbedder",
 ]

@@ -18,11 +18,11 @@ llama-index-vector-stores-weaviate = "*"
 llama-index-embeddings-huggingface = "*"
 llama-index-llms-huggingface = "*"
 weaviate-client = "*"
-fastapi = "*"
 uvicorn = "*"
 python-multipart = "*"
 transformers = "*"
 torch = "*"
+fastapi = "*"
 
 [dev-packages]
 

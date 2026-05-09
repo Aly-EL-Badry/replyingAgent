@@ -1,0 +1,5 @@
+# pyrefly.toml
+# Top-level flat config — do NOT use [tool.pyrefly.*] nesting here.
+# That nested syntax is only valid inside pyproject.toml.
+
+python-interpreter = "C:\\Users\\aibak\\.virtualenvs\\FacebookReplay-nWu_Xfzo\\Scripts\\python.exe"

@@ -1,3 +1,4 @@
+from typing import List
 from pydantic import BaseModel
 
 
@@ -11,3 +12,4 @@ class RagSettings(BaseModel):
     chunk_overlap: int
     top_k: int
     min_score: float
+    allowed_extensions: List[str]

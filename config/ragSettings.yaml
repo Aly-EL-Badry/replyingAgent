@@ -13,3 +13,11 @@ rag:
   # Retrieval configuration
   top_k: 5                 # number of chunks to retrieve per query
   min_score: 0.5           # minimum cosine-similarity score to include a chunk
+
+  # Upload validation
+  allowed_extensions:      # file types accepted by the /upload endpoint
+    - ".txt"
+    - ".pdf"
+    - ".docx"
+    - ".md"
+    - ".csv"

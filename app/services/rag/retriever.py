@@ -28,12 +28,7 @@ from typing import List
 
 from app.core.settings_constant import constants
 from app.infrastructure.weaviate_client import weaviate_client
-from app.services.rag.embedder import hf_embedder
-
-
-# ---------------------------------------------------------------------------
-# Data transfer object
-# ---------------------------------------------------------------------------
+import weaviate.classes as wvc
 
 @dataclass
 class RetrievedChunk:
@@ -42,128 +37,60 @@ class RetrievedChunk:
     text: str
     source: str
     chunk_index: int
-    score: float  # cosine certainty in [0, 1]
+    score: float 
 
     def to_context_string(self) -> str:
-        """Format the chunk as a context block for LLM prompts."""
         return (
             f"[Source: {self.source} | Chunk #{self.chunk_index} | "
             f"Score: {self.score:.3f}]\n{self.text}"
         )
 
 
-# ---------------------------------------------------------------------------
-# Internal helper (synchronous — runs in thread pool)
-# ---------------------------------------------------------------------------
-
-def _weaviate_search(
-    query_vector: List[float],
-    top_k: int,
-    min_score: float,
-) -> List[RetrievedChunk]:
+def _weaviate_search(query: str, top_k: int, min_score: float) -> List[RetrievedChunk]:
     """
-    Execute a ``near_vector`` search against the Weaviate collection.
-
-    Parameters
-    ----------
-    query_vector:
-        Dense embedding of the user query.
-    top_k:
-        Maximum number of results to return from Weaviate.
-    min_score:
-        Minimum cosine certainty (0–1) to include in the returned list.
-
-    Returns
-    -------
-    List[RetrievedChunk]
-        Filtered and sorted (descending score) list of matching chunks.
+    Execute a hybrid (BM25 + bi-encoder) search against the Weaviate collection.
+    Weaviate auto-embeds the query via text2vec-huggingface for the dense leg.
     """
-    import weaviate.classes as wvc
 
     client = weaviate_client.get_client()
-    collection_name = constants.rag.collection_name
-    collection = client.collections.get(collection_name)
+    collection = client.collections.get(constants.rag.collection_name)
 
-    response = collection.query.near_vector(
-        near_vector=query_vector,
+    response = collection.query.hybrid(
+        query=query,
+        alpha=0.5,
         limit=top_k,
-        return_metadata=wvc.query.MetadataQuery(certainty=True),
+        return_metadata=wvc.query.MetadataQuery(score=True),
     )
 
     results: List[RetrievedChunk] = []
     for obj in response.objects:
-        certainty: float = (
-            obj.metadata.certainty if obj.metadata and obj.metadata.certainty is not None
-            else 0.0
-        )
-        if certainty < min_score:
+        score = obj.metadata.score if obj.metadata and obj.metadata.score is not None else 0.0
+        if score < min_score:
             continue
+        ci = obj.properties.get("chunk_index", 0)
         results.append(
             RetrievedChunk(
                 text=str(obj.properties.get("text", "")),
                 source=str(obj.properties.get("source", "unknown")),
-                chunk_index=int(obj.properties.get("chunk_index", 0)),
-                score=certainty,
+                chunk_index=int(ci) if isinstance(ci, (int, float, str)) else 0,
+                score=score,
             )
         )
 
-    # Sort highest score first
     results.sort(key=lambda c: c.score, reverse=True)
     return results
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-async def retrieve_context(
-    query: str,
-    top_k: int | None = None,
-    min_score: float | None = None,
-) -> List[RetrievedChunk]:
-    """
-    Retrieve the most relevant knowledge-base chunks for a user query.
-
-    Parameters
-    ----------
-    query:
-        The raw user question or comment text.
-    top_k:
-        Override the default number of results (``constants.rag.top_k``).
-    min_score:
-        Override the default similarity threshold (``constants.rag.min_score``).
-
-    Returns
-    -------
-    List[RetrievedChunk]
-        Ranked list of matching chunks (may be empty if nothing is relevant).
-    """
+async def retrieve_context(query: str,top_k: int | None = None,min_score: float | None = None,) -> List[RetrievedChunk]:
     effective_top_k: int = top_k if top_k is not None else constants.rag.top_k
     effective_min_score: float = min_score if min_score is not None else constants.rag.min_score
 
-    # Embed the query (async, thread-safe)
-    query_vector: List[float] = await hf_embedder.embed_text(query)
-
-    # Perform Weaviate search (synchronous DB call → thread pool)
-    chunks: List[RetrievedChunk] = await asyncio.to_thread(
-        _weaviate_search, query_vector, effective_top_k, effective_min_score
+    return await asyncio.to_thread(
+        _weaviate_search, query, effective_top_k, effective_min_score
     )
 
-    return chunks
 
-
-async def retrieve_context_as_string(
-    query: str,
-    top_k: int | None = None,
-    min_score: float | None = None,
-    separator: str = "\n\n---\n\n",
-) -> str:
-    """
-    Convenience wrapper: retrieve chunks and join them into a single
-    context string ready to be injected into an LLM prompt.
-
-    Returns an empty string when no relevant chunks are found.
-    """
+async def retrieve_context_as_string(query: str,top_k: int | None = None,min_score: float | None = None,separator: str = "\n\n---\n\n",) -> str:
     chunks = await retrieve_context(query, top_k=top_k, min_score=min_score)
     if not chunks:
         return ""

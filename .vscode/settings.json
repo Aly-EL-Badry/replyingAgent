@@ -1,3 +1,5 @@
 {
-    "files.autoSave": "afterDelay"
+    "files.autoSave": "afterDelay",
+    "python-envs.defaultEnvManager": "ms-python.python:pipenv",
+    "python.defaultInterpreterPath": "C:\\Users\\aibak\\.virtualenvs\\FacebookReplay-nWu_Xfzo\\Scripts\\python.exe",
 }

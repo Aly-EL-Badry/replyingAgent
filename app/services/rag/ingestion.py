@@ -27,6 +27,7 @@ Usage
     result = await ingest_file(file_bytes=b"...", filename="policy.pdf")
     # → {"status": "ok", "source": "policy.pdf", "chunks_stored": 42}
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,19 +41,10 @@ from llama_index.core.node_parser import SentenceSplitter
 
 from app.core.settings_constant import constants
 from app.infrastructure.weaviate_client import weaviate_client
-from app.services.rag.embedder import hf_embedder
+import weaviate.classes as wvc
 
-
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
-
 def _load_and_split(file_path: str) -> list[str]:
-    """
-    Synchronous helper: load a file with LlamaIndex and split into chunks.
-
-    Returns a list of raw text strings, one per chunk.
-    """
     reader = SimpleDirectoryReader(input_files=[file_path])
     documents = reader.load_data()
 
@@ -64,78 +56,35 @@ def _load_and_split(file_path: str) -> list[str]:
     return [node.get_content() for node in nodes]
 
 
-def _store_chunks(
-    chunks: list[str],
-    vectors: list[list[float]],
-    source: str,
-) -> int:
-    """
-    Synchronous helper: bulk-insert chunk–vector pairs into Weaviate.
-
-    Returns the number of objects successfully inserted.
-    """
-    import weaviate.classes as wvc
-
+def _store_chunks(chunks: list[str], source: str) -> int:
     client = weaviate_client.get_client()
     collection_name = constants.rag.collection_name
     collection = client.collections.get(collection_name)
 
-    objects: list[wvc.data.DataObject] = []
-    for idx, (text, vector) in enumerate(zip(chunks, vectors)):
-        objects.append(
-            wvc.data.DataObject(
-                properties={
-                    "text": text,
-                    "source": source,
-                    "chunk_index": idx,
-                },
-                vector=vector,
-            )
+    objects: list[wvc.data.DataObject[dict[str, Any]]] = [
+        wvc.data.DataObject(
+            properties={"text": text, "source": source, "chunk_index": idx},
         )
+        for idx, text in enumerate(chunks)
+    ]
 
     response = collection.data.insert_many(objects)
     errors = [str(e) for e in (response.errors or {}).values()]
     if errors:
         print(f"[RAGIngestion] Weaviate insert errors: {errors}")
 
-    inserted = len(objects) - len(errors)
-    return inserted
+    return len(objects) - len(errors)
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
+# public API
 async def ingest_file(file_bytes: bytes, filename: str) -> dict[str, Any]:
-    """
-    Main entry point for the RAG ingestion pipeline.
-
-    Parameters
-    ----------
-    file_bytes:
-        Raw content of the uploaded file.
-    filename:
-        Original filename (used to determine file type and stored as ``source``).
-
-    Returns
-    -------
-    dict with keys:
-        - ``status``        : "ok" | "error"
-        - ``source``        : original filename
-        - ``chunks_stored`` : number of chunks successfully stored (0 on error)
-        - ``message``       : error description (only present on error)
-    """
-    # 1. Ensure Weaviate collection exists (idempotent)
-    await asyncio.to_thread(weaviate_client.ensure_collection)
-
-    # 2. Write bytes to a temporary file so LlamaIndex readers can open it
     suffix = Path(filename).suffix or ".txt"
+    
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
 
     try:
-        # 3. Load + chunk (synchronous, run in thread pool)
         chunks: list[str] = await asyncio.to_thread(_load_and_split, tmp_path)
 
         if not chunks:
@@ -146,13 +95,7 @@ async def ingest_file(file_bytes: bytes, filename: str) -> dict[str, Any]:
                 "message": "No text could be extracted from the file.",
             }
 
-        # 4. Embed all chunks in one batched call
-        vectors: list[list[float]] = await hf_embedder.embed_batch(chunks)
-
-        # 5. Store in Weaviate (synchronous DB call, run in thread pool)
-        stored: int = await asyncio.to_thread(
-            _store_chunks, chunks, vectors, filename
-        )
+        stored: int = await asyncio.to_thread(_store_chunks, chunks, filename)
 
         return {
             "status": "ok",
@@ -169,7 +112,6 @@ async def ingest_file(file_bytes: bytes, filename: str) -> dict[str, Any]:
         }
 
     finally:
-        # Always clean up the temp file
         try:
             os.unlink(tmp_path)
         except OSError:

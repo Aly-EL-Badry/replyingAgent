@@ -1,27 +1,12 @@
-"""
-app/services/rag/rag_service.py
---------------------------------
-High-level RAG facade that combines ingestion + retrieval into a single
-coherent service layer.
-
-This is the recommended entry point for LangGraph nodes and generator
-classes that need RAG capabilities.  It avoids importing multiple sub-modules
-directly and provides a stable, versioned interface.
-
-Usage
------
-    from app.services.rag.rag_service import rag_service
-
-    # ── Ingestion (called from the /raghock endpoint) ──────────────────
-    result = await rag_service.index_file(file_bytes, "policy.pdf")
-
-    # ── Retrieval (called from graph nodes / generators) ───────────────
-    chunks  = await rag_service.retrieve("What is the refund policy?")
-    context = await rag_service.retrieve_as_string("What is the refund policy?")
-"""
 from __future__ import annotations
 
 from typing import Any, List
+import asyncio
+from weaviate.classes.query import Filter
+from app.infrastructure.weaviate_client import weaviate_client
+from app.core.settings_constant import constants
+
+
 
 from app.services.rag.ingestion import ingest_file
 from app.services.rag.retriever import (
@@ -31,103 +16,62 @@ from app.services.rag.retriever import (
 )
 
 
+
 class RAGService:
-    """
-    Unified facade for all RAG operations.
+    def __init__(self):
+        self.client = weaviate_client.get_client()
+        self.collection_name = constants.rag.collection_name
+   
+    # Private Methods 
+    def _do_delete(self, filename: str) -> int:    
+        if not self.client.collections.exists(self.collection_name):
+            return -1
+        collection = self.client.collections.get(self.collection_name)
+        result = collection.data.delete_many(where=Filter.by_property("source").equal(filename))
+        return result.successful
+    
+    def _do_list(self) -> list[dict[str, Any]]:
 
-    Methods
-    -------
-    index_file(file_bytes, filename)
-        Run the full ingestion pipeline for an uploaded file.
-    retrieve(query, top_k, min_score)
-        Return a ranked list of ``RetrievedChunk`` objects.
-    retrieve_as_string(query, top_k, min_score, separator)
-        Return retrieved context as a single prompt-ready string.
-    """
+        if not self.client.collections.exists(self.collection_name):
+            return []
 
-    # ------------------------------------------------------------------
-    # Ingestion
-    # ------------------------------------------------------------------
+        collection = self.client.collections.get(self.collection_name)
+        file_counts: dict[str, int] = {}
+        for obj in collection.iterator(include_vector=False, return_properties=["source"]):
+            source = obj.properties.get("source", "")
+            if isinstance(source, str) and source:
+                file_counts[source] = file_counts.get(source, 0) + 1
 
-    async def index_file(
-        self,
-        file_bytes: bytes,
-        filename: str,
-    ) -> dict[str, Any]:
-        """
-        Ingest a file into the knowledge base.
+        return [
+            {"source": src, "chunk_count": count}
+            for src, count in sorted(file_counts.items())
+        ]
 
-        Parameters
-        ----------
-        file_bytes:
-            Raw content of the uploaded file.
-        filename:
-            Original filename (used to determine file type and stored as the
-            ``source`` field in Weaviate).
-
-        Returns
-        -------
-        dict with keys:
-            - ``status``        : "ok" | "error"
-            - ``source``        : original filename
-            - ``chunks_stored`` : number of chunks successfully stored
-            - ``message``       : error description (only on error)
-        """
+    
+    # Public Methods
+    async def index_file(self,file_bytes: bytes,filename: str,) -> dict[str, Any]:
         return await ingest_file(file_bytes=file_bytes, filename=filename)
 
-    # ------------------------------------------------------------------
-    # Retrieval
-    # ------------------------------------------------------------------
-
-    async def retrieve(
-        self,
-        query: str,
-        top_k: int | None = None,
-        min_score: float | None = None,
-    ) -> List[RetrievedChunk]:
-        """
-        Retrieve relevant chunks for *query*.
-
-        Parameters
-        ----------
-        query:
-            User question or comment text.
-        top_k:
-            Override the default number of results from ``ragSettings.yaml``.
-        min_score:
-            Override the default similarity threshold from ``ragSettings.yaml``.
-
-        Returns
-        -------
-        List[RetrievedChunk]
-            Ordered by descending cosine similarity.  Empty when nothing is
-            relevant or the knowledge base is empty.
-        """
+    async def retrieve(self,query: str,top_k: int | None = None,min_score: float | None = None,) -> List[RetrievedChunk]:
         return await retrieve_context(query, top_k=top_k, min_score=min_score)
 
-    async def retrieve_as_string(
-        self,
-        query: str,
-        top_k: int | None = None,
-        min_score: float | None = None,
-        separator: str = "\n\n---\n\n",
-    ) -> str:
-        """
-        Retrieve relevant chunks and join them into a single context string.
-
-        Ideal for direct injection into LLM system or user prompts.
-        Returns an empty string when the knowledge base has no relevant
-        content for *query*.
-        """
-        return await retrieve_context_as_string(
-            query,
-            top_k=top_k,
-            min_score=min_score,
-            separator=separator,
-        )
+    async def retrieve_as_string(self,query: str,top_k: int | None = None,min_score: float | None = None,separator: str = "\n\n---\n\n") -> str:
+        return await retrieve_context_as_string(query,top_k=top_k,min_score=min_score,separator=separator)
 
 
-# ---------------------------------------------------------------------------
-# Module-level singleton
-# ---------------------------------------------------------------------------
+    async def delete_file(self, filename: str) -> dict[str, Any]:
+        deleted = await asyncio.to_thread(self._do_delete, filename)
+        if deleted == -1:
+            return {"status": "not_found", "source": filename, "chunks_deleted": 0}
+        return {
+            "status": "deleted" if deleted > 0 else "not_found",
+            "source": filename,
+            "chunks_deleted": deleted,
+        }
+
+    async def list_files(self) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._do_list)
+
+
+
 rag_service = RAGService()
