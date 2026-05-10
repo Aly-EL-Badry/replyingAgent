@@ -12,17 +12,17 @@ huggingface-hub = "*"
 facebook-sdk = "*"
 ty = "*"
 langgraph = "*"
-weaviate = "*"
 llama-index = "*"
-llama-index-vector-stores-weaviate = "*"
 llama-index-embeddings-huggingface = "*"
 llama-index-llms-huggingface = "*"
-weaviate-client = "*"
 uvicorn = "*"
 python-multipart = "*"
 transformers = "*"
 torch = "*"
 fastapi = "*"
+asyncpg = "*"
+sqlalchemy = {extras = ["asyncio"], version = "*"}
+pgvector = "*"
 
 [dev-packages]
 

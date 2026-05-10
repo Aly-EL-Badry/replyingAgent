@@ -5,7 +5,7 @@ A **FastAPI + LangGraph** service that listens to a Facebook webhook and automat
 - **Private/sensitive comments** (a multilingual stub on the thread + a detailed DM via Messenger)
 - **Messenger DMs** sent directly to the page
 
-The AI backbone is **Hugging Face Inference API** with a primary/fallback model strategy. All configuration (prompts, model IDs, timeouts) lives in YAML files; secrets come from `.env`.
+The AI backbone is **Hugging Face Inference API** with a primary/fallback model strategy. A **Weaviate vector store** powers the RAG knowledge base for grounded, document-backed answers. All configuration (prompts, model IDs, RAG settings, timeouts) lives in YAML files; secrets come from `.env`.
 
 ---
 
@@ -14,14 +14,15 @@ The AI backbone is **Hugging Face Inference API** with a primary/fallback model 
 2. [Architecture Overview](#2-architecture-overview)
 3. [LangGraph Pipeline](#3-langgraph-pipeline)
 4. [Generators & AI Services](#4-generators--ai-services)
-5. [Configuration System](#5-configuration-system)
-6. [Environment Variables (.env)](#6-environment-variables-env)
-7. [YAML Config Files](#7-yaml-config-files)
-8. [API Endpoints](#8-api-endpoints)
-9. [Infrastructure Clients](#9-infrastructure-clients)
-10. [Running Locally](#10-running-locally)
-11. [Key Design Decisions & Patterns](#11-key-design-decisions--patterns)
-12. [Known TODOs & Future Work](#12-known-todos--future-work)
+5. [RAG Knowledge Base](#5-rag-knowledge-base)
+6. [Configuration System](#6-configuration-system)
+7. [Environment Variables (.env)](#7-environment-variables-env)
+8. [YAML Config Files](#8-yaml-config-files)
+9. [API Endpoints](#9-api-endpoints)
+10. [Infrastructure Clients](#10-infrastructure-clients)
+11. [Running Locally](#11-running-locally)
+12. [Key Design Decisions & Patterns](#12-key-design-decisions--patterns)
+13. [Known TODOs & Future Work](#13-known-todos--future-work)
 
 ---
 
@@ -29,31 +30,36 @@ The AI backbone is **Hugging Face Inference API** with a primary/fallback model 
 
 ```
 FacebookReplay/
-├── main.py                         # FastAPI app entry point
+├── main.py                         # FastAPI app entry point (includes Weaviate lifespan)
 ├── Pipfile / Pipfile.lock          # Python 3.13 dependencies (pipenv)
 ├── .env                            # Secrets (not committed)
 ├── .env.dev                        # Dev-env overrides
 │
 ├── config/                         # YAML configuration files (all merged at startup)
 │   ├── prompt.yaml                 # reply + messenger system prompts
-│   ├── classifierPrompt.yaml       # classifier system prompt
+│   ├── classifierPrompt.yaml       # classifier + private_reply system prompts
 │   ├── facebookSettings.yaml       # graph_api_base_url, version, timeout
-│   └── hfSettings.yaml             # model_id, fallback_model_id, max_new_tokens, temp, top_p
+│   ├── hfSettings.yaml             # model_id, fallback_model_id, max_new_tokens, temp, top_p
+│   └── ragSettings.yaml            # Weaviate collection, embedding model, chunking, retrieval params
 │
 ├── test.py                         # End-to-end mocked test script for the graph
 │
 └── app/
     ├── api/v1/
     │   ├── health.py               # GET /health
-    │   └── webhock.py              # GET+POST /webhook (unified Facebook webhook)
+    │   ├── webhock.py              # GET+POST /webhook (unified Facebook webhook)
+    │   └── ragHock.py              # POST /raghock/upload, POST /raghock/query,
+    │                               #   GET /raghock/files, DELETE /raghock/file/{filename}
     │
     ├── core/
-    │   ├── settings_constant.py    # ConstantSettings — loads all YAML configs
-    │   ├── settings_secrets.py     # SecretSettings — loads .env secrets
+    │   ├── settings_constant.py    # ConstantSettings — loads all YAML configs (incl. rag)
+    │   ├── settings_secrets.py     # SecretSettings — loads .env secrets (incl. Weaviate)
     │   └── serializers/
     │       ├── fb_settings.py      # FacebookSettings Pydantic model
     │       ├── hf_settings.py      # HuggingFaceSettings Pydantic model
-    │       └── prompt.py           # Prompt Pydantic model (system_prompt field)
+    │       ├── prompt.py           # Prompt Pydantic model (system_prompt field)
+    │       ├── rag_settings.py     # RagSettings Pydantic model (collection, chunking, retrieval)
+    │       └── rag_serializers.py  # QueryRequest / QueryResponse Pydantic models
     │
     ├── features/
     │   ├── comments/
@@ -73,18 +79,26 @@ FacebookReplay/
     │       ├── public_reply.py     # public_reply_node — generates & posts AI reply to comment thread
     │       └── private_reply.py    # private_reply_node — posts stub on thread + sends DM
     │
-    ├── services/generator/
-    │   ├── __init__.py             # Public re-exports for all generators
-    │   ├── base_generator.py       # BaseReplyGenerator (ABC) — shared generate() pipeline
-    │   └── generators/
-    │       ├── facebook_comment_generator.py   # Public comment reply generator
-    │       ├── messenger_reply_generator.py    # Messenger DM reply generator
-    │       ├── private_reply_generator.py      # Detailed private reply (sent via DM)
-    │       └── classifier_generator.py         # LLM-based classifier → returns (classification, language)
+    ├── services/
+    │   ├── generator/
+    │   │   ├── __init__.py             # Public re-exports for all generators
+    │   │   ├── base_generator.py       # BaseReplyGenerator (ABC) — shared generate() pipeline
+    │   │   └── generators/
+    │   │       ├── facebook_comment_generator.py   # Public comment reply generator
+    │   │       ├── messenger_reply_generator.py    # Messenger DM reply generator
+    │   │       ├── private_reply_generator.py      # Detailed private reply (sent via DM)
+    │   │       └── classifier_generator.py         # LLM-based classifier → returns (classification, language)
+    │   │
+    │   └── rag/
+    │       ├── __init__.py             # Public re-exports for RAG module
+    │       ├── ingestion.py            # File → LlamaIndex chunks → HF embeddings → Weaviate
+    │       ├── retriever.py            # Hybrid BM25 + vector search → ranked RetrievedChunk list
+    │       └── rag_service.py          # RAGService facade: index_file, retrieve, delete_file, list_files
     │
     └── infrastructure/
         ├── facebook_client.py      # FacebookClient — wraps facebook-sdk + httpx for Messenger
-        └── hf_client.py            # HFClient — async wrapper around huggingface_hub InferenceClient
+        ├── hf_client.py            # HFClient — async wrapper around huggingface_hub InferenceClient
+        └── weaviate_client.py      # WeaviateClientWrapper — lazy-connect, auto-create collection
 ```
 
 ---
@@ -111,6 +125,12 @@ Facebook Webhook (POST /webhook)
                               ▼
                      LangGraph Pipeline
                     (app/graph/builder.py)
+
+RAG Knowledge Base (POST /raghock/*)
+  ├── /upload  → ingest_file() → Weaviate
+  ├── /query   → retrieve_context() → RAGService
+  ├── /files   → list_files()
+  └── /file/{filename}  → delete_file()
 ```
 
 ---
@@ -203,38 +223,111 @@ messages = [
 
 ---
 
-## 5. Configuration System
+## 5. RAG Knowledge Base
+
+The RAG pipeline enables the agent to answer questions grounded in uploaded documents (policy PDFs, product catalogs, etc.).
+
+### Architecture
+
+```
+File Upload (/raghock/upload)
+        │
+        ▼
+  ingest_file()                         [ingestion.py]
+  ├── Write bytes → temp file
+  ├── SimpleDirectoryReader (LlamaIndex) → Document objects
+  ├── SentenceSplitter → overlapping text chunks
+  └── Weaviate batch insert (properties: text, source, chunk_index)
+                │
+                ▼
+        Weaviate Collection
+        ("KnowledgeBase")
+                │
+                ▼
+  Query (/raghock/query)                [retriever.py]
+  ├── Hybrid search: BM25 + dense vector (alpha=0.5)
+  ├── Filter by min_score
+  └── Return ranked RetrievedChunk list
+```
+
+### `RAGService` Facade (`services/rag/rag_service.py`)
+
+| Method                | Description                                         |
+|-----------------------|-----------------------------------------------------|
+| `index_file()`        | Delegates to `ingest_file()`, returns status dict   |
+| `retrieve()`          | Returns `List[RetrievedChunk]`                      |
+| `retrieve_as_string()`| Returns formatted context string                   |
+| `delete_file()`       | Deletes all chunks matching a source filename       |
+| `list_files()`        | Lists all indexed files with chunk counts           |
+
+### `RetrievedChunk` Dataclass
+
+| Field         | Type    | Description                                    |
+|---------------|---------|------------------------------------------------|
+| `text`        | `str`   | Chunk content                                  |
+| `source`      | `str`   | Original filename                              |
+| `chunk_index` | `int`   | Zero-based position in the source document     |
+| `score`       | `float` | Hybrid search relevance score                  |
+
+### Supported File Types
+
+| Extension | Description          |
+|-----------|----------------------|
+| `.txt`    | Plain text           |
+| `.pdf`    | PDF (via `pypdf`)    |
+| `.docx`   | Word documents       |
+| `.md`     | Markdown             |
+| `.csv`    | CSV files            |
+
+### `WeaviateClientWrapper` (`infrastructure/weaviate_client.py`)
+
+- **Lazy connection**: connects on first `get_client()` call.
+- **Auto-provisioning**: creates the `KnowledgeBase` collection if it doesn't exist.
+- **Smart routing**: detects Weaviate Cloud (`.weaviate.io`) vs local (`connect_to_local`).
+- **HF header**: injects `X-HuggingFace-Api-Key` for the `text2vec-huggingface` vectorizer.
+- Singleton: `weaviate_client = WeaviateClientWrapper()`
+
+### App Lifespan Integration (`main.py`)
+
+On **startup**, the app calls `weaviate_client.get_client()` to eagerly establish the connection and ensure the collection exists. On **shutdown**, `weaviate_client.close()` gracefully terminates the connection.
+
+---
+
+## 6. Configuration System
 
 Config is split into two classes, both using `pydantic-settings`:
 
 ### `ConstantSettings` (`app/core/settings_constant.py`)
 Loads non-secret configuration from **all `.yaml` / `.yml` files** in the `config/` directory.
 
-| Attribute     | Type                 | Source YAML File         |
-|---------------|----------------------|--------------------------|
-| `facebook`    | `FacebookSettings`   | `facebookSettings.yaml`  |
-| `huggingface` | `HuggingFaceSettings`| `hfSettings.yaml`        |
-| `reply`       | `Prompt`             | `prompt.yaml`            |
-| `messenger`   | `Prompt`             | `prompt.yaml`            |
-| `classifier`  | `Prompt`             | `classifierPrompt.yaml`  |
-| `private_reply`| `Prompt`            | `classifierPrompt.yaml` or dedicated key |
+| Attribute      | Type                 | Source YAML File         |
+|----------------|----------------------|--------------------------|
+| `facebook`     | `FacebookSettings`   | `facebookSettings.yaml`  |
+| `huggingface`  | `HuggingFaceSettings`| `hfSettings.yaml`        |
+| `reply`        | `Prompt`             | `prompt.yaml`            |
+| `messenger`    | `Prompt`             | `prompt.yaml`            |
+| `classifier`   | `Prompt`             | `classifierPrompt.yaml`  |
+| `private_reply`| `Prompt`             | `classifierPrompt.yaml`  |
+| `rag`          | `RagSettings`        | `ragSettings.yaml`       |
 
 Singleton: `constants = ConstantSettings()`
 
 ### `SecretSettings` (`app/core/settings_secrets.py`)
 Loads secrets from `.env` file.
 
-| Field           | Env Variable       | Description                    |
-|-----------------|--------------------|--------------------------------|
-| `hf_token`      | `HF_TOKEN`         | Hugging Face API token         |
-| `fb_token`      | `FB_TOKEN`         | Facebook Page Access Token     |
-| `fb_verify_token`| `FB_VERIFY_TOKEN` | Facebook webhook verify token  |
+| Field             | Env Variable       | Description                      |
+|-------------------|--------------------|----------------------------------|
+| `hf_token`        | `HF_TOKEN`         | Hugging Face API token           |
+| `fb_token`        | `FB_TOKEN`         | Facebook Page Access Token       |
+| `fb_verify_token` | `FB_VERIFY_TOKEN`  | Facebook webhook verify token    |
+| `weaviate_url`    | `WEAVIATE_URL`     | Weaviate instance URL (default: `http://localhost:8080`) |
+| `weaviate_api_key`| `WEAVIATE_API_KEY` | Weaviate API key (optional, for cloud) |
 
 Singleton: `secrets = SecretSettings()`
 
 ---
 
-## 6. Environment Variables (.env)
+## 7. Environment Variables (.env)
 
 Create a `.env` file in the project root with:
 
@@ -242,13 +335,17 @@ Create a `.env` file in the project root with:
 HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 FB_TOKEN=EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 FB_VERIFY_TOKEN=your_custom_verify_token
+
+# Weaviate (optional — defaults to local)
+WEAVIATE_URL=http://localhost:8080
+WEAVIATE_API_KEY=                        # leave blank for local, set for Weaviate Cloud
 ```
 
 > **Railway / Production**: Set these as environment variables in your deployment platform dashboard. The app will automatically pick them up since `SecretSettings` reads from both `.env` and OS environment.
 
 ---
 
-## 7. YAML Config Files
+## 8. YAML Config Files
 
 ### `config/facebookSettings.yaml`
 ```yaml
@@ -293,9 +390,27 @@ private_reply:
     You are replying privately to a user who needs detailed assistance...
 ```
 
+### `config/ragSettings.yaml`
+```yaml
+rag:
+  collection_name: "KnowledgeBase"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_dimension: 384
+  chunk_size: 512        # tokens per chunk (LlamaIndex SentenceSplitter)
+  chunk_overlap: 50      # overlap between consecutive chunks
+  top_k: 5               # number of chunks to retrieve per query
+  min_score: 0.5         # minimum hybrid score to include a chunk
+  allowed_extensions:
+    - ".txt"
+    - ".pdf"
+    - ".docx"
+    - ".md"
+    - ".csv"
+```
+
 ---
 
-## 8. API Endpoints
+## 9. API Endpoints
 
 ### `GET /health`
 Simple health check. Returns `200 OK`.
@@ -303,14 +418,14 @@ Simple health check. Returns `200 OK`.
 ### `GET /webhook/`
 Facebook webhook verification endpoint.
 
-| Query Param       | Expected Value              |
-|-------------------|-----------------------------|
-| `hub.mode`        | `subscribe`                 |
-| `hub.verify_token`| Matches `FB_VERIFY_TOKEN`   |
-| `hub.challenge`   | Any string (echoed back)    |
+| Query Param        | Expected Value              |
+|--------------------|-----------------------------|
+| `hub.mode`         | `subscribe`                 |
+| `hub.verify_token` | Matches `FB_VERIFY_TOKEN`   |
+| `hub.challenge`    | Any string (echoed back)    |
 
 ### `POST /webhook/`
-Unified event listener. Detects event type from payload:
+Unified Facebook event listener. Detects event type from payload:
 
 | Condition               | Routed To              |
 |-------------------------|------------------------|
@@ -321,7 +436,62 @@ Always returns `{"status": "ok"}` immediately; heavy work runs in background tas
 
 ---
 
-## 9. Infrastructure Clients
+### RAG Knowledge Base Endpoints (`/raghock`)
+
+#### `POST /raghock/upload`
+Upload a document to the knowledge base. Ingestion runs as a background task.
+
+- **Request**: `multipart/form-data` with `file` field
+- **Accepted types**: `.txt`, `.pdf`, `.docx`, `.md`, `.csv`
+- **Response** (`202 Accepted`):
+```json
+{
+  "status": "queued",
+  "filename": "policy.pdf",
+  "size_bytes": 123456,
+  "message": "File has been queued for indexing. Check server logs for progress."
+}
+```
+
+#### `POST /raghock/query`
+Embed a query and perform hybrid similarity search against the knowledge base.
+
+- **Request body** (`QueryRequest`):
+```json
+{
+  "query": "What is the refund policy?",
+  "top_k": 5,
+  "min_score": 0.5
+}
+```
+- **Response** (`QueryResponse`):
+```json
+{
+  "query": "What is the refund policy?",
+  "context": "[Source: policy.pdf | Chunk #3 | Score: 0.872]\n...",
+  "chunks_found": 3
+}
+```
+
+#### `GET /raghock/files`
+List all indexed files with their chunk counts.
+
+```json
+{
+  "total_files": 2,
+  "files": [
+    {"source": "policy.pdf", "chunk_count": 42},
+    {"source": "faq.txt", "chunk_count": 18}
+  ]
+}
+```
+
+#### `DELETE /raghock/file/{filename}`
+Delete all chunks in the knowledge base belonging to a given source file.
+
+---
+
+## 10. Infrastructure Clients
 
 ### `HFClient` (`app/infrastructure/hf_client.py`)
 - Wraps `huggingface_hub.InferenceClient` for async chat completion.
@@ -337,13 +507,30 @@ Singleton: `hf_client = HFClient()`
 
 Singleton: `facebook_client = FacebookClient()`
 
+### `WeaviateClientWrapper` (`app/infrastructure/weaviate_client.py`)
+- Lazily connects to Weaviate on first access.
+- Auto-creates the `KnowledgeBase` collection with `text2vec-huggingface` vectorizer if it doesn't exist.
+- Supports Weaviate Cloud (API key auth) and local Docker deployments.
+
+Singleton: `weaviate_client = WeaviateClientWrapper()`
+
 ---
 
-## 10. Running Locally
+## 11. Running Locally
 
 ### Prerequisites
 - Python 3.13
 - `pipenv`
+- A running Weaviate instance (Docker recommended for local dev)
+
+### Weaviate (Docker)
+
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -e AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true \
+  cr.weaviate.io/semitechnologies/weaviate:latest
+```
 
 ### Setup
 
@@ -354,7 +541,7 @@ pipenv install
 # Activate virtual environment
 pipenv shell
 
-# Create .env with your secrets (see Section 6)
+# Create .env with your secrets (see Section 7)
 
 # Run the dev server
 uvicorn main:app --reload --port 8000
@@ -376,10 +563,10 @@ The test script mocks the HF client and Facebook client to validate the entire L
 
 ---
 
-## 11. Key Design Decisions & Patterns
+## 12. Key Design Decisions & Patterns
 
 ### Singleton Pattern
-All heavy objects (graph, clients, generators) are instantiated once at module import time and reused across requests. This avoids re-initialization overhead per request.
+All heavy objects (graph, clients, generators, RAG service) are instantiated once at module import time and reused across requests. This avoids re-initialization overhead per request.
 
 ### Abstract Generator Pattern
 `BaseReplyGenerator` enforces that all generators share the same `generate()` pipeline. Adding a new generator (e.g., for WhatsApp) only requires:
@@ -388,8 +575,8 @@ All heavy objects (graph, clients, generators) are instantiated once at module i
 3. Optionally overriding `_format_user_message()`
 
 ### Config Separation (Secrets vs Constants)
-- **Secrets** (tokens, keys) → `.env` file via `SecretSettings`
-- **Constants** (prompts, model IDs, timeouts) → YAML files via `ConstantSettings`
+- **Secrets** (tokens, keys, URLs) → `.env` file via `SecretSettings`
+- **Constants** (prompts, model IDs, timeouts, RAG params) → YAML files via `ConstantSettings`
 
 This makes it safe to commit YAML configs to Git while keeping secrets out.
 
@@ -397,7 +584,13 @@ This makes it safe to commit YAML configs to Git while keeping secrets out.
 `ConstantSettings` merges **all** YAML files in `config/` at startup. Adding a new config category just requires creating a new YAML file — no code changes needed.
 
 ### Background Tasks
-Comment processing runs as FastAPI `BackgroundTasks`. The webhook returns `{"status": "ok"}` immediately to Facebook (within the required 5-second window), then processes asynchronously.
+Comment processing and document ingestion run as FastAPI `BackgroundTasks`. The webhook and upload endpoints return immediately to the client, then process asynchronously.
+
+### RAG — Hybrid Search
+The retriever uses Weaviate's hybrid search (`alpha=0.5`), blending BM25 sparse retrieval with dense vector similarity. This provides better recall than pure semantic search, especially for product names and exact phrases.
+
+### RAG — Consistent Embedding Space
+The `text2vec-huggingface` vectorizer in Weaviate is configured with the same embedding model used during ingestion (`sentence-transformers/all-MiniLM-L6-v2`). This ensures query vectors and document vectors live in the same space.
 
 ### Comment Classification Flow
 The `ClassifierGenerator` uses the LLM itself to classify comments as `public` or `private`. Private comments are those that require personal/sensitive handling (e.g., pricing, complaints, account issues). The LLM returns structured JSON for reliable parsing.
@@ -409,13 +602,13 @@ The `ClassifierGenerator` uses the LLM itself to classify comments as `public` o
 
 ---
 
-## 12. Known TODOs & Future Work
+## 13. Known TODOs & Future Work
 
 - [ ] **Swap `MemorySaver` → `RedisSaver`** for persistent multi-session conversation history (noted in `builder.py`)
 - [ ] **Redis short-term memory** for conversation history across turns (noted in past LangGraph design)
 - [ ] **Arize Phoenix / OpenTelemetry** observability integration (planned in LangGraph multi-tenant design)
 - [ ] **Human-in-the-loop overrides** for high-priority or emotional comments (e.g., "Mad" emotion routing)
 - [ ] **Emotion detection node** — add an emotion classification step to the LangGraph pipeline
-- [ ] **RAG integration** — connect to a product/policy knowledge base for grounded answers
+- [ ] **RAG-augmented reply nodes** — wire `rag_service.retrieve_as_string()` into `public_reply_node` and `private_reply_node` for grounded answers
 - [ ] **Production deployment** — Railway platform with env vars (setup previously done)
-- [ ] Fix typo: `webhock.py` → `webhook.py`
+- [ ] Fix typo: `webhock.py` → `webhook.py`, `ragHock.py` → `rag_hook.py`

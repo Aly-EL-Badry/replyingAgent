@@ -12,6 +12,7 @@ from .serializers.fb_settings import FacebookSettings
 from .serializers.hf_settings import HuggingFaceSettings
 from .serializers.prompt import Prompt
 from .serializers.rag_settings import RagSettings
+from .serializers.agent_settings import AgentSettings
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
@@ -57,6 +58,12 @@ class ConstantSettings(BaseSettings):
     classifier: Prompt = Field(default=...)
     private_reply: Prompt = Field(default=...)
     rag: RagSettings = Field(default=...)
+    agent: AgentSettings = Field(default=AgentSettings())
+    positive_feedback_ack: Prompt | None = Field(default=None)
+    bad_feedback: Prompt | None = Field(default=None)
+    make_order_confirm: Prompt | None = Field(default=None)
+    product_details: Prompt | None = Field(default=None)
+    messenger_agent: Prompt = Field(default=Prompt(system_prompt="You are a helpful customer support assistant. Reply concisely and professionally."))
 
     @classmethod
     def settings_customise_sources(
