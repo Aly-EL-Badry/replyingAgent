@@ -16,8 +16,7 @@ WORKDIR /app
 # Copy Pipenv files
 COPY Pipfile Pipfile.lock ./
 
-# THE FIX: Add --ignore-pipfile to bypass the 3.13 vs 3.11 check
-RUN pipenv install --system --deploy --ignore-pipfile
+RUN pipenv install --system
 
 # Copy application code
 COPY . .
