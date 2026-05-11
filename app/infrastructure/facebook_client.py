@@ -14,9 +14,6 @@ class FacebookClient:
 
     def __init__(self, access_token: str | None = None) -> None:
         self._token = access_token or secrets.fb_token
-        # The facebook-sdk only knows versions up to 3.1; we pass version=None
-        # so it uses its own bundled default.  Our httpx-based calls (Messenger)
-        # always use the full versioned URL from config instead.
         self._graph = GraphAPI(access_token=self._token)
         self._base_url = constants.facebook.graph_api_base_url
         self._timeout = constants.facebook.request_timeout

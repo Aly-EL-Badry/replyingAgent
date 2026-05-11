@@ -86,10 +86,7 @@ class ProductService:
         stock_en, stock_ar = _STOCK.get(row.stock_status, ("—", "—"))
         ar = language == "ar"
 
-        qty = (
-            (f"\n• {'الكمية المتاحة' if ar else 'Units available'}: {row.stock_qty}")
-            if row.stock_qty is not None else ""
-        )
+        qty = ""
         restock = (
             (f"\n• {'إعادة التوفر' if ar else 'Restock'}: {row.estimated_restock}")
             if row.estimated_restock else ""
@@ -130,13 +127,11 @@ class ProductService:
             return (f"Sorry, we couldn't find '{status.query}' in our catalog. "
                     "Please contact us for more details.")
 
-        price_note = f" — {status.price_hint}" if status.price_hint else ""
-
         if status.in_stock:
             if language == "ar":
-                return f"✅ نعم! '{status.query}' متوفر لدينا حالياً{price_note}. تواصل معنا لإتمام الطلب."
-            return (f"✅ Great news! '{status.query}' is currently available{price_note}. "
-                    "Contact us to place your order!")
+                return f"✅ نعم! '{status.query}' متوفر لدينا حالياً. لمزيد من التفاصيل أو لمعرفة السعر، نرجو التواصل عبر الرسائل الخاصة."
+            return (f"✅ Great news! '{status.query}' is currently available. "
+                    "For pricing details or to place your order, please DM us!")
 
         restock = f" {status.estimated_restock}" if status.estimated_restock else ""
         if language == "ar":

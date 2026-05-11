@@ -10,6 +10,10 @@ def ingest_data(data: dict) -> list[tuple[str, str]]:
                 print(f"Skipping echo message from sender (id={sender_id})")
                 continue
 
+            if "reaction" in messaging_event:
+                print("Skipping messenger reaction event.")
+                continue
+
             sender_psid: str = messaging_event.get("sender", {}).get("id", "")
             message_text: str = messaging_event.get("message", {}).get("text", "")
 

@@ -17,21 +17,20 @@ from app.services.rag import retrieve_context_as_string
 
 _SYSTEM_PROMPT = constants.messenger_agent.system_prompt
 
-_CONFIRM_RE = re.compile(r"^\s*confirm\b", re.IGNORECASE)
-_ADDRESS_RE = re.compile(r"(?:address|addr|عنوان)[:\s]+(.+)", re.IGNORECASE)
-_PHONE_RE   = re.compile(r"(?:phone|tel|هاتف|phone)[:\s]+([\d\s\+\-]+)", re.IGNORECASE)
-
-
-def _parse_confirm_details(text: str) -> dict[str, str]:
-    details: dict[str, str] = {}
-    addr_match  = _ADDRESS_RE.search(text)
-    phone_match = _PHONE_RE.search(text)
-    if addr_match:
-        details["address"] = addr_match.group(1).strip()
-    if phone_match:
-        details["phone"] = phone_match.group(1).strip()
-    return details
-
+def _build_ask_details_dm(product_name: str, language: str) -> str:
+    if language == "ar":
+        return (
+            f"✅ رائع! سنكمل طلبك لـ *{product_name}*.\n\n"
+            f"يُرجى إرسال بياناتك بهذا الشكل:\n"
+            f"الاسم: [اسمك الكامل]\n"
+            f"الهاتف: [رقم هاتفك]"
+        )
+    return (
+        f"✅ Great! Let's complete your order for *{product_name}*.\n\n"
+        f"Please send your details in this format:\n"
+        f"Name: [Your full name]\n"
+        f"Phone: [Your phone number]"
+    )
 
 def _build_order_confirmed_dm(order_id: str, language: str) -> str:
     base_url  = constants.agent.base_url
@@ -52,6 +51,20 @@ def _build_order_confirmed_dm(order_id: str, language: str) -> str:
     )
 
 
+_NAME_RE  = re.compile(r"(?:name|اسم)[:\s]+(.+?)(?:\n|$)", re.IGNORECASE)
+_PHONE_RE = re.compile(r"(?:phone|هاتف|tel|phone)[:\s]+([\d\s\+\-]+)", re.IGNORECASE)
+
+def _parse_contact_details(text: str) -> dict:
+    details = {}
+    name_match  = _NAME_RE.search(text)
+    phone_match = _PHONE_RE.search(text)
+    if name_match:
+        details["name"]  = name_match.group(1).strip()
+    if phone_match:
+        details["phone"] = phone_match.group(1).strip()
+    return details
+
+
 class MessengerAgent:
     """
     Intent-aware multi-turn Messenger agent.
@@ -65,25 +78,39 @@ class MessengerAgent:
         history_window = constants.agent.messenger_history_window
         history = await history_store.get_history(sender_psid, limit=history_window * 2)
 
-        # ── Order CONFIRM shortcut ────────────────────────────────────────
-        if _CONFIRM_RE.match(text):
-            pending_order = await order_service.get_pending_order_for_sender(sender_psid)
-            if pending_order:
-                contact_info = _parse_confirm_details(text)
-                confirmed = await order_service.confirm_order(
-                    pending_order.order_id, contact_info
-                )
+        intent, language = await classifier_generator.classify(text)
+        print(f"[MessengerAgent] sender={sender_psid} intent={intent} lang={language}")
+
+        # ── Step 2: Order in pending_details → parse contact info and finalize ──────────
+        pending_details_order = await order_service.get_pending_details_order_for_sender(sender_psid)
+        if pending_details_order:
+            contact_info = _parse_contact_details(text)
+            if contact_info:
+                confirmed = await order_service.confirm_order(pending_details_order.order_id, contact_info)
                 if confirmed:
-                    language = "ar" if any("ر" in m.get("content", "") for m in history) else "en"
                     reply_text = _build_order_confirmed_dm(confirmed.order_id, language)
                     await history_store.append(sender_psid, "user",      text)
                     await history_store.append(sender_psid, "assistant", reply_text)
                     await facebook_client.send_messenger_message(sender_psid, reply_text)
-                    print(f"[MessengerAgent] Order {confirmed.order_id} confirmed for sender={sender_psid}")
+                    print(f"[MessengerAgent] Order {confirmed.order_id} finalized for sender={sender_psid}")
                     return
+            else:
+                # Details not parsed — re-ask
+                reply_text = _build_ask_details_dm(pending_details_order.product_name, language)
+                await facebook_client.send_messenger_message(sender_psid, reply_text)
+                return
 
-        intent, language = await classifier_generator.classify(text)
-        print(f"[MessengerAgent] sender={sender_psid} intent={intent} lang={language}")
+        # ── Step 1: User confirms intent → move order to pending_details, ask for info ──
+        if intent == "confirm_order":
+            pending_order = await order_service.get_pending_order_for_sender(sender_psid)
+            if pending_order:
+                await order_service.move_to_pending_details(pending_order.order_id)
+                reply_text = _build_ask_details_dm(pending_order.product_name, language)
+                await history_store.append(sender_psid, "user",      text)
+                await history_store.append(sender_psid, "assistant", reply_text)
+                await facebook_client.send_messenger_message(sender_psid, reply_text)
+                print(f"[MessengerAgent] Order {pending_order.order_id} moved to pending_details")
+                return
 
         extra_context = ""
 

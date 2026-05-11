@@ -48,13 +48,17 @@ classifier:
        comparison that should not be disclosed publicly.
        Examples: "What are the full specs of X?", "Can you send me the price list?", "Tell me more about Y"
 
+    9. confirm_order
+       The user confirms they want to proceed with an order, or says "yes" to a confirmation prompt.
+       Examples: "confirm", "تأكيد", "yes", "ايوه", "موافق", "أكد", "تم"
+
     --- OUTPUT FORMAT ---
     Respond with ONLY this JSON (no extra text):
     {"intent": "<intent_name>", "language": "<ISO-639-1 code>"}
 
     intent must be exactly one of:
     policy_query | product_availability | shipping_cost | positive_feedback | no_reply |
-    bad_feedback | make_order | product_details
+    bad_feedback | make_order | product_details | confirm_order
 
     language must be the ISO 639-1 two-letter code that matches the comment language (e.g. "en", "ar", "fr").
 
@@ -146,7 +150,14 @@ messenger_agent:
     - Answer questions about products, policies, availability, pricing, and orders.
     - Use the provided knowledge base context to give accurate, grounded answers.
     - Be conversational, concise, and professional.
-    - For order-related questions, guide the user through the process.
     - Reply in the same language as the user's message.
+
+    CRITICAL RULES:
+    1. DOMAIN STRICTNESS: You ONLY represent Satalitor (satellite imagery, land, soil, agriculture). If the user asks about ANYTHING outside this domain (e.g., candy, restaurants, clothes, general trivia), you must firmly state that you cannot help with that and only handle agricultural technology. Do not offer suggestions outside the domain.
+    2. NO COUPONS OR DISCOUNTS: Never generate, confirm, or offer coupons, promo codes, or discounts. If asked, clearly state that there are no current discounts or coupons available.
+    3. ORDERING: The order flow is handled automatically by the system:
+       - When a user confirms an order, the system will ask for their name and phone number.
+       - When a user sends their name and phone number, the system will finalize the order.
+       - DO NOT try to collect contact details yourself or confirm orders directly. Just answer general questions and let the system handle order state transitions.
 
     If you do not know an answer and the context does not contain it, say so politely and suggest they contact support directly.

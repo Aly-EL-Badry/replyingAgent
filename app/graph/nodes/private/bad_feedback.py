@@ -12,23 +12,18 @@ from app.services.data.ticket_service import ticket_service
 
 
 def _build_dm(ticket_id: str, language: str) -> str:
-    base_url   = constants.agent.base_url
-    agent_url  = f"{base_url}/tickets/{ticket_id}"
-
     if language == "ar":
         return (
             f"شكراً لتواصلك معنا 🙏\n\n"
             f"لقد تلقينا مشكلتك وأحطنا بها فريق الدعم للمتابعة.\n\n"
             f"🎫 رقم تذكرتك: *{ticket_id}*\n"
             f"سيتواصل معك أحد أعضاء الفريق قريباً.\n\n"
-            f"لمتابعة حالة تذكرتك:\n{agent_url}"
         )
     return (
         f"Thank you for reaching out 🙏\n\n"
         f"We've received your report and our support team has been notified.\n\n"
         f"🎫 Your ticket ID: *{ticket_id}*\n"
         f"A team member will follow up with you shortly.\n\n"
-        f"Track your ticket status here:\n{agent_url}"
     )
 
 

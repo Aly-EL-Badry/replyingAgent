@@ -129,7 +129,27 @@ class OrderService:
     async def confirm_order(
         self, order_id: str, contact_info: Dict[str, Any]
     ) -> Optional[OrderRecord]:
+        """Move order to confirmed with contact details."""
         return await self.update_order(order_id, "confirmed", contact_info)
+
+    async def move_to_pending_details(self, order_id: str) -> Optional[OrderRecord]:
+        """After user says 'confirm', move to pending_details waiting for contact info."""
+        return await self.update_order(order_id, "pending_details")
+
+    async def get_pending_details_order_for_sender(self, sender_id: str) -> Optional[OrderRecord]:
+        """Return the most recent order waiting for contact details from this sender."""
+        async with async_session_factory() as session:
+            stmt = (
+                select(OrderRow)
+                .where(
+                    OrderRow.sender_id == sender_id,
+                    OrderRow.status    == "pending_details",
+                )
+                .order_by(OrderRow.created_at.desc())
+                .limit(1)
+            )
+            row = (await session.execute(stmt)).scalar_one_or_none()
+        return _row_to_record(row) if row else None
 
 
 order_service = OrderService()

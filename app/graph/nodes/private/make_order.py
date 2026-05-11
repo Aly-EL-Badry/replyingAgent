@@ -57,19 +57,13 @@ def _build_confirm_dm(
             f"مرحباً! 😊 لقد تلقينا طلبك.\n\n"
             f"📦 المنتج: *{product_name}*\n"
             f"🔢 رقم الطلب المؤقت: *{order_id}*\n\n"
-            f"لتأكيد طلبك، يُرجى الرد بـ *CONFIRM* مع معلومات التوصيل:\n"
-            f"• عنوان التوصيل\n"
-            f"• رقم الهاتف\n\n"
-            f"مثال:\nCONFIRM\nالعنوان: شارع ...\nالهاتف: 010xxxxxxxx"
+            f"لتأكيد طلبك، يُرجى الرد بكلمة *تأكيد* أو *Confirm*."
         )
     return (
         f"Hi! 😊 We've received your order request.\n\n"
         f"📦 Product: *{product_name}*\n"
         f"🔢 Pending order ID: *{order_id}*\n\n"
-        f"To confirm your order, please reply with *CONFIRM* and your delivery details:\n"
-        f"• Delivery address\n"
-        f"• Phone number\n\n"
-        f"Example:\nCONFIRM\nAddress: 123 Main St\nPhone: +1-555-0000"
+        f"To confirm your order, please reply with *Confirm*."
     )
 
 
