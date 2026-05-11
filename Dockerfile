@@ -1,56 +1,28 @@
-# ── Stage 1: Builder ──────────────────────────────────────────
-# Using a specific python version to match the runtime
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime AS builder
+# Start with your PyTorch base
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
-# System deps needed for building/compiling
+# Install system deps for Postgres and Pipenv
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     libpq-dev \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-
-# Create virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-
-# ── Stage 2: Runtime ──────────────────────────────────────────
-# CRITICAL: Version must match the builder's Python (3.11)
-FROM python:3.11-slim AS runtime
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
+    build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the pre-built venv
-COPY --from=builder /opt/venv /opt/venv
+# Install pipenv
+RUN pip install --no-cache-dir pipenv
 
-# Set environment variables
 WORKDIR /app
-ENV PATH="/opt/venv/bin:$PATH"
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV UVICORN_WORKERS=1
 
-# Copy application code
-COPY main.py           ./main.py
-COPY app/              ./app/
-COPY config/           ./config/
+# Copy Pipenv files first (for better caching)
+COPY Pipfile Pipfile.lock ./
 
-# FastAPI default port
-EXPOSE 8000
+# Install dependencies system-wide inside the container
+# --system tells Pipenv not to create a second virtual environment
+# --deploy ensures the build fails if Pipfile.lock is out of sync
+RUN pipenv install --system --deploy
 
-# Health-check (Using absolute path to be safe)
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
+# Copy your application code
+COPY . .
 
-# Run with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Railway uses $PORT
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
