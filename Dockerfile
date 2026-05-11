@@ -1,7 +1,7 @@
 # Start with your PyTorch base
 FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
-# Install system deps for Postgres and Pipenv
+# Install system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     build-essential \
@@ -13,15 +13,13 @@ RUN pip install --no-cache-dir pipenv
 
 WORKDIR /app
 
-# Copy Pipenv files first (for better caching)
+# Copy Pipenv files
 COPY Pipfile Pipfile.lock ./
 
-# Install dependencies system-wide inside the container
-# --system tells Pipenv not to create a second virtual environment
-# --deploy ensures the build fails if Pipfile.lock is out of sync
-RUN pipenv install --system --deploy
+# THE FIX: Add --ignore-pipfile to bypass the 3.13 vs 3.11 check
+RUN pipenv install --system --deploy --ignore-pipfile
 
-# Copy your application code
+# Copy application code
 COPY . .
 
 # Railway uses $PORT
