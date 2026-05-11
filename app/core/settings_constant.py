@@ -1,4 +1,3 @@
-from click import prompt
 import yaml
 from pathlib import Path
 from typing import Any, Tuple, Type
@@ -12,8 +11,8 @@ from pydantic_settings import (
 from .serializers.fb_settings import FacebookSettings
 from .serializers.hf_settings import HuggingFaceSettings
 from .serializers.prompt import Prompt
-from .serializers.messenger_prompt import MessengerPrompt
-from .serializers.classifier_prompt import ClassifierPrompt
+from .serializers.rag_settings import RagSettings
+from .serializers.agent_settings import AgentSettings
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
@@ -55,8 +54,16 @@ class ConstantSettings(BaseSettings):
     facebook: FacebookSettings = Field(default=...)
     huggingface: HuggingFaceSettings = Field(default=...)
     reply: Prompt = Field(default=...)
-    messenger: MessengerPrompt = Field(default=...)
-    classifier: ClassifierPrompt = Field(default=...)
+    messenger: Prompt = Field(default=...)
+    classifier: Prompt = Field(default=...)
+    private_reply: Prompt = Field(default=...)
+    rag: RagSettings = Field(default=...)
+    agent: AgentSettings = Field(default=AgentSettings())
+    positive_feedback_ack: Prompt | None = Field(default=None)
+    bad_feedback: Prompt | None = Field(default=None)
+    make_order_confirm: Prompt | None = Field(default=None)
+    product_details: Prompt | None = Field(default=None)
+    messenger_agent: Prompt = Field(default=Prompt(system_prompt="You are a helpful customer support assistant. Reply concisely and professionally."))
 
     @classmethod
     def settings_customise_sources(

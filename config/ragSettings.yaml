@@ -1,0 +1,23 @@
+rag:
+  # Weaviate collection name for knowledge-base documents
+  collection_name: "KnowledgeBase"
+
+  # HuggingFace embedding model (sentence-transformers compatible)
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_dimension: 384
+
+  # Text chunking strategy
+  chunk_size: 512          # tokens per chunk (LlamaIndex SentenceSplitter)
+  chunk_overlap: 50        # overlap between consecutive chunks
+
+  # Retrieval configuration
+  top_k: 5                 # number of chunks to retrieve per query
+  min_score: 0.5           # minimum cosine-similarity score to include a chunk
+
+  # Upload validation
+  allowed_extensions:      # file types accepted by the /upload endpoint
+    - ".txt"
+    - ".pdf"
+    - ".docx"
+    - ".md"
+    - ".csv"

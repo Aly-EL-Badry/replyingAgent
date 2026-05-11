@@ -17,8 +17,16 @@ class SecretSettings(BaseSettings):
         extra="ignore",
     )
 
-    hf_token: str = Field(default=..., validation_alias="HF_TOKEN")
-    fb_token: str = Field(default=..., validation_alias="FB_TOKEN")
-    fb_verify_token: str = Field(default=..., validation_alias="FB_VERIFY_TOKEN")
+    hf_token: str           = Field(default=..., validation_alias="HF_TOKEN")
+    fb_token: str           = Field(default=..., validation_alias="FB_TOKEN")
+    fb_verify_token: str    = Field(default=..., validation_alias="FB_VERIFY_TOKEN")
+
+    # ── PostgreSQL (single database for everything) ───────────────────────────
+    database_url: str       = Field(
+        default="postgresql+asyncpg://postgres:postgres@localhost:5432/fbreplay",
+        validation_alias="DATABASE_URL",
+    )
+    conv_ttl_hours: int     = Field(default=24, validation_alias="CONV_TTL_HOURS")
+
 
 secrets = SecretSettings()

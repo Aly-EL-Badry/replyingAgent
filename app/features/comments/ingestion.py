@@ -21,7 +21,10 @@ def ingest_data(data: dict) -> list[tuple[str, str, str]]:
                 continue
 
             if verb == "add":
-                if item_type == "comment":
+                if item_type == "reaction":
+                    print("Skipping reaction event.")
+                    continue
+                elif item_type == "comment":
                     comment_id = value.get("comment_id")
                     message = value.get("message")
                     events.append((comment_id, message, sender_id))

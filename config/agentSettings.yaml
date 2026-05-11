@@ -1,0 +1,11 @@
+agent:
+  # Base URL used when constructing human-agent links sent in DMs.
+  # Change this to your deployed domain in production.
+  base_url: "http://localhost:8000"
+
+  # Prefix strings for auto-generated ticket and order IDs
+  ticket_prefix: "TK"
+  order_prefix: "ORD"
+
+  # How many turns of Messenger conversation history to include in each request
+  messenger_history_window: 10

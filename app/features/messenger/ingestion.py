@@ -1,14 +1,4 @@
 def ingest_data(data: dict) -> list[tuple[str, str]]:
-    """
-    Parse a Facebook Messenger webhook payload and return a list of
-    (sender_psid, message_text) tuples.
-
-    In a Messenger payload the user ID lives at:
-        entry[0].messaging[0].sender.id
-
-    We skip echo events (messages sent by the page itself) and any
-    events that carry no text (e.g. attachments, postbacks).
-    """
     events = []
     print(f"Received Messenger Webhook Data: {data}")
 
@@ -18,6 +8,10 @@ def ingest_data(data: dict) -> list[tuple[str, str]]:
             if messaging_event.get("message", {}).get("is_echo"):
                 sender_id = messaging_event.get("sender", {}).get("id", "unknown")
                 print(f"Skipping echo message from sender (id={sender_id})")
+                continue
+
+            if "reaction" in messaging_event:
+                print("Skipping messenger reaction event.")
                 continue
 
             sender_psid: str = messaging_event.get("sender", {}).get("id", "")
