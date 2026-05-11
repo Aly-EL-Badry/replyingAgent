@@ -98,11 +98,13 @@ async def _seed_products(session: AsyncSession) -> None:
 
 
 async def init_db() -> None:
+    async with async_session_factory() as session:
+        await _enable_pgvector(session)
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session_factory() as session:
-        await _enable_pgvector(session)
         await _seed_products(session)
 
     print("[DB] PostgreSQL schema ready.")

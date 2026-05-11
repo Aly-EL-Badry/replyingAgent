@@ -1,0 +1,22 @@
+# ── Git / IDE ────────────────────────────
+.git
+.gitignore
+.vscode
+__pycache__
+*.pyc
+
+# ── Environment files (secrets) ─────────
+.env
+.env.dev
+.env.docker
+
+# ── Docker files themselves ──────────────
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# ── Misc ─────────────────────────────────
+README.md
+test.py
+pyrefly.toml
+*.md

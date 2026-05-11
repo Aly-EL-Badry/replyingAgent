@@ -27,11 +27,18 @@ from app.services.rag.embedder  import rag_embedder
 def _load_and_split(file_path: str) -> list[str]:
     reader    = SimpleDirectoryReader(input_files=[file_path])
     documents = reader.load_data()
-    splitter  = SentenceSplitter(
-        chunk_size=constants.rag.chunk_size,
-        chunk_overlap=constants.rag.chunk_overlap,
-    )
-    nodes = splitter.get_nodes_from_documents(documents)
+    
+    if file_path.lower().endswith('.md'):
+        from llama_index.core.node_parser import MarkdownNodeParser
+        parser = MarkdownNodeParser()
+        nodes = parser.get_nodes_from_documents(documents)
+    else:
+        splitter  = SentenceSplitter(
+            chunk_size=constants.rag.chunk_size,
+            chunk_overlap=constants.rag.chunk_overlap,
+        )
+        nodes = splitter.get_nodes_from_documents(documents)
+        
     return [node.get_content() for node in nodes]
 
 

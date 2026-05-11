@@ -51,20 +51,27 @@ async def retrieve_context(
 
     # pgvector cosine distance operator: <=>
     # cosine_similarity = 1 - cosine_distance
+    from sqlalchemy import func
+
     async with async_session_factory() as session:
+        ts_query = func.plainto_tsquery('english', query)
+        ts_vector = func.to_tsvector('english', KnowledgeChunk.text)
+        
+        text_score = func.ts_rank_cd(ts_vector, ts_query)
+        vec_score = 1 - KnowledgeChunk.embedding.cosine_distance(query_vec)
+        
+        hybrid_score = (vec_score * 0.5) + (text_score * 0.5)
+
         stmt = (
             select(
                 KnowledgeChunk.text,
                 KnowledgeChunk.source,
                 KnowledgeChunk.chunk_index,
-                (
-                    text("1 - (embedding <=> CAST(:vec AS vector))")
-                ).label("score"),
+                hybrid_score.label("score"),
             )
             .where(KnowledgeChunk.embedding.isnot(None))
-            .order_by(text("embedding <=> CAST(:vec AS vector)"))
+            .order_by(hybrid_score.desc())
             .limit(effective_top_k)
-            .params(vec=str(query_vec))
         )
         rows = (await session.execute(stmt)).all()
 
@@ -78,6 +85,19 @@ async def retrieve_context(
         for row in rows
         if float(row.score) >= effective_min_score
     ]
+
+    # If no chunks met the threshold, but we found some, return at least the best one
+    if not results and rows:
+        top_row = rows[0]
+        results.append(
+            RetrievedChunk(
+                text=top_row.text,
+                source=top_row.source,
+                chunk_index=top_row.chunk_index,
+                score=float(top_row.score),
+            )
+        )
+
     return results
 
 
